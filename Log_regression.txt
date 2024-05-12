@@ -1,0 +1,82 @@
+
+Asthma_data <- read.csv("Asthma.csv")
+head(Asthma_data, n = 5)
+library(dplyr)
+glimpse(Asthma_data)
+
+library(caTools)
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(ROCR)
+
+missing value
+colSums(is.na(Asthma_data))
+
+duplicate
+Asthma_data <- Asthma_data %>%
+  distinct()
+
+nomalize data
+numeric_cols <- sapply(Asthma_data, is.numeric)
+Asthma_data[numeric_cols] <- scale(Asthma_data[numeric_cols])
+
+summary(Asthma_data)
+saved
+write.csv(Asthma_data, "cleaned_Asthma_data.csv", row.names = FALSE)
+
+Asthma_data <- Asthma_data %>%
+  select(-Severity_Moderate, -Severity_None) %>%
+  rename(Severity = Severity_Mild)
+
+library(caret)
+Asthma_data$Severity <- factor(Asthma_data$Severity, levels = c(0, 1), labels = c("Non-Severe", "Severe"))
+
+split the data to train the model
+set.seed(123)
+split <- sample.split(Asthma_data$Severity, SplitRatio = 0.7)
+training_set <- subset(Asthma_data, split == TRUE)
+test_set <- subset(Asthma_data, split == FALSE)
+
+fit the model
+
+model <- glm(Severity ~ ., data = training_set, family = binomial)
+summary(model)
+
+make prediction
+pred_prob <- predict(model, newdata = test_set, type = "response")
+
+pred_class <- ifelse(pred_prob > 0.5, "Severe", "Non-Severe")
+pred_class <- factor(pred_class, levels = c("Non-Severe", "Severe"))
+
+conf_matrix <- confusionMatrix(pred_class, test_set$Severity)
+print(conf_matrix)
+
+
+evaluate the model
+accuracy <- conf_matrix$overall["Accuracy"]
+sensitivity <- conf_matrix$byClass["Sensitivity"]
+specificity <- conf_matrix$byClass["Specificity"]
+
+print(paste("Accuracy:", accuracy))
+print(paste("Sensitivity:", sensitivity))
+print(paste("Specificity:", specificity))
+
+visualization
+
+pred <- prediction(pred_prob, test_set$Severity)
+perf <- performance(pred, "tpr", "fpr")
+
+plot(perf, col = "blue", lwd = 2, main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "red")
+
+
+auc <- performance(pred, measure = "auc")
+auc_value <- auc@y.values[[1]]
+print(paste("AUC:", auc_value))
+
+
+dev.copy(png, "ROC_Curve.png")
+dev.off()
+
+

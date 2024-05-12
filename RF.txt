@@ -1,0 +1,69 @@
+Asthma_data <- read.csv("Asthma.csv")
+head(Asthma_data, n = 5)
+library(dplyr)
+glimpse(Asthma_data)
+
+library(randomForest)
+library(caTools)
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(ROCR)
+library(ROSE)
+
+Asthma_data <- Asthma_data %>%
+  select(-Severity_Moderate, -Severity_None) %>%
+  rename(Severity = Severity_Mild)
+
+Convert Severity to a binary factor (0: Non-Severe, 1: Severe)
+Asthma_data$Severity <- factor(Asthma_data$Severity, levels = c(0, 1), labels = c("Non-Severe", "Severe"))
+
+Apply oversampling
+oversampled_data <- ovun.sample(Severity ~ ., data = Asthma_data, method = "over", N = 2 * table(Asthma_data$Severity)[1])$data
+
+Split the oversampled data into training and test sets
+set.seed(123)
+split <- sample.split(oversampled_data$Severity, SplitRatio = 0.7)
+training_set <- subset(oversampled_data, split == TRUE)
+test_set <- subset(oversampled_data, split == FALSE)
+
+Train the random forest model
+set.seed(123)
+rf_model <- randomForest(Severity ~ ., data = training_set, ntree = 500, mtry = 3, importance = TRUE)
+
+Summary of the model
+print(rf_model)
+
+Make predictions on the test set
+rf_pred <- predict(rf_model, newdata = test_set, type = "prob")[,2]
+rf_class <- predict(rf_model, newdata = test_set)
+
+Confusion matrix
+conf_matrix_rf <- confusionMatrix(rf_class, test_set$Severity)
+print(conf_matrix_rf)
+
+Evaluate the model
+accuracy_rf <- conf_matrix_rf$overall["Accuracy"]
+sensitivity_rf <- conf_matrix_rf$byClass["Sensitivity"]
+specificity_rf <- conf_matrix_rf$byClass["Specificity"]
+
+print(paste("Accuracy:", accuracy_rf))
+print(paste("Sensitivity:", sensitivity_rf))
+print(paste("Specificity:", specificity_rf))
+
+ROC curve
+pred_rf <- prediction(rf_pred, test_set$Severity)
+perf_rf <- performance(pred_rf, "tpr", "fpr")
+
+Plot ROC curve
+plot(perf_rf, col = "blue", lwd = 2, main = "ROC Curve (Random Forest)")
+abline(a = 0, b = 1, lty = 2, col = "red")
+
+# AUC
+auc_rf <- performance(pred_rf, measure = "auc")
+auc_value_rf <- auc_rf@y.values[[1]]
+print(paste("AUC:", auc_value_rf))
+
+# Save the plot
+dev.copy(png, "ROC_Curve_RF.png")
+dev.off()
